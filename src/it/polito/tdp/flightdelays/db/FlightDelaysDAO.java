@@ -8,86 +8,158 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+import it.polito.tdp.flightdelays.model.AirportIdMap;
+import it.polito.tdp.flightdelays.model.Flight;
+import it.polito.tdp.flightdelays.model.FlightIdMap;
+import it.polito.tdp.flightdelays.db.ConnectDB;
+import it.polito.tdp.flightdelays.model.AirlineIdMap;
 import it.polito.tdp.flightdelays.model.Airline;
 import it.polito.tdp.flightdelays.model.Airport;
-import it.polito.tdp.flightdelays.model.Flight;
+
 
 public class FlightDelaysDAO {
 
-	public List<Airline> loadAllAirlines() {
-		String sql = "SELECT id, airline from airlines";
-		List<Airline> result = new ArrayList<Airline>();
-
+	public List<Airline> getAllAirlines(AirlineIdMap airlineIdMap) {
+		String sql = "SELECT * FROM airlines";
+		List<Airline> list = new ArrayList<>();
 		try {
 			Connection conn = ConnectDB.getConnection();
 			PreparedStatement st = conn.prepareStatement(sql);
-			ResultSet rs = st.executeQuery();
+			ResultSet res = st.executeQuery();
 
-			while (rs.next()) {
-				result.add(new Airline(rs.getString("ID"), rs.getString("airline")));
+			while (res.next()) {
+				Airline airline = new Airline(res.getString("ID"), res.getString("AIRLINE"));
+				list.add(airlineIdMap.get(airline));
 			}
-
 			conn.close();
-			return result;
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-			System.out.println("Errore connessione al database");
-			throw new RuntimeException("Error Connection Database");
-		}
-	}
-
-	public List<Airport> loadAllAirports() {
-		String sql = "SELECT id, airport, city, state, country, latitude, longitude FROM airports";
-		List<Airport> result = new ArrayList<Airport>();
-		
-		try {
-			Connection conn = ConnectDB.getConnection();
-			PreparedStatement st = conn.prepareStatement(sql);
-			ResultSet rs = st.executeQuery();
-
-			while (rs.next()) {
-				Airport airport = new Airport(rs.getString("id"), rs.getString("airport"), rs.getString("city"),
-						rs.getString("state"), rs.getString("country"), rs.getDouble("latitude"), rs.getDouble("longitude"));
-				result.add(airport);
-			}
-			
-			conn.close();
-			return result;
+			return list;
 			
 		} catch (SQLException e) {
 			e.printStackTrace();
-			System.out.println("Errore connessione al database");
-			throw new RuntimeException("Error Connection Database");
+			throw new RuntimeException();
 		}
 	}
 
-	public List<Flight> loadAllFlights() {
-		String sql = "SELECT id, airline, flight_number, origin_airport_id, destination_airport_id, scheduled_dep_date, "
-				+ "arrival_date, departure_delay, arrival_delay, air_time, distance FROM flights";
-		List<Flight> result = new LinkedList<Flight>();
 
+	public List<Airport> getAllAirports(AirportIdMap airportIdMap) {
+		String sql = "SELECT * FROM airports";
+		List<Airport> list = new ArrayList<>();
 		try {
 			Connection conn = ConnectDB.getConnection();
 			PreparedStatement st = conn.prepareStatement(sql);
-			ResultSet rs = st.executeQuery();
+			ResultSet res = st.executeQuery();
 
-			while (rs.next()) {
-				Flight flight = new Flight(rs.getInt("id"), rs.getString("airline"), rs.getInt("flight_number"),
-						rs.getString("origin_airport_id"), rs.getString("destination_airport_id"),
-						rs.getTimestamp("scheduled_dep_date").toLocalDateTime(),
-						rs.getTimestamp("arrival_date").toLocalDateTime(), rs.getInt("departure_delay"),
-						rs.getInt("arrival_delay"), rs.getInt("air_time"), rs.getInt("distance"));
-				result.add(flight);
+			while (res.next()) {
+				Airport airport = new Airport(res.getString("ID"), res.getString("AIRPORT"), res.getString("CITY"),
+						res.getString("STATE"), res.getString("COUNTRY"),res.getDouble("LATITUDE"), res.getDouble("LONGITUDE")) ; 
+				list.add(airportIdMap.get(airport));
 			}
-
 			conn.close();
-			return result;
-
+			return list;
 		} catch (SQLException e) {
 			e.printStackTrace();
-			System.out.println("Errore connessione al database");
-			throw new RuntimeException("Error Connection Database");
+			throw new RuntimeException();
 		}
 	}
-}
+	
+
+
+	public List<Flight> loadAllFlights(AirlineIdMap airlineIdMap, AirportIdMap airportIdMap, FlightIdMap routeIdMap) {
+			String sql = "SELECT * FROM flights";
+			List<Flight> list = new ArrayList<>();
+			try {
+				Connection conn = ConnectDB.getConnection();
+				PreparedStatement st = conn.prepareStatement(sql);
+				ResultSet res = st.executeQuery();
+				
+				int counter = 0;
+				while (res.next()) {
+					Airport sourceAirport = airportIdMap.get(res.getString("ORIGIN_AIRPORT_ID"));
+					Airport destinationAirport = airportIdMap.get(res.getString("DESTINATION_AIRPORT_ID"));
+					Airline airline = airlineIdMap.get(res.getString("AIRLINE"));
+							
+					Flight route = new Flight(counter, airline, res.getInt("FLIGHT_NUMBER"), sourceAirport, destinationAirport,
+							res.getTimestamp("SCHEDULED_DEP_DATE").toLocalDateTime(),
+							res.getTimestamp("ARRIVAL_DATE").toLocalDateTime(), res.getDouble("DEPARTURE_DELAY"),
+							res.getDouble("ARRIVAL_DELAY"), res.getDouble("AIR_TIME"), res.getInt("DISTANCE"));
+							
+					list.add(routeIdMap.get(route));
+					counter++;
+					System.out.println(route);
+					if (sourceAirport==null) {
+						System.out.println("fonte non trovata");
+					}
+					sourceAirport.getFlights().add(routeIdMap.get(route));
+					destinationAirport.getFlights().add(routeIdMap.get(route));
+					airline.getFlights().add(routeIdMap.get(route));
+				}	
+				conn.close();
+				return list;
+			} catch (SQLException e) {
+				e.printStackTrace();
+				throw new RuntimeException();
+			}
+		}
+
+
+	
+		public List<Flight> getFlightsByAirline(Airline a, AirportIdMap airportIdMap, FlightIdMap routeIdMap) {
+			String sql ="select * from flights " + 
+					"where ID=?" ;
+			List<Flight> list = new ArrayList<>();
+			try {
+				Connection conn = ConnectDB.getConnection();
+				PreparedStatement st = conn.prepareStatement(sql);
+				st.setString(1, a.getAirlineId());
+				System.out.println(a);
+				ResultSet res = st.executeQuery();
+				
+				int counter = 0;
+				while (res.next()) {
+					System.out.println("trovato");
+					Airport sourceAirport = airportIdMap.get(res.getString("ORIGIN_AIRPORT_ID"));
+					Airport destinationAirport = airportIdMap.get(res.getString("DESTINATION_AIRPORT_ID"));
+					
+					Flight route = new Flight(counter, a, res.getInt("FLIGHT_NUMBER"), sourceAirport, destinationAirport,
+							res.getTimestamp("SCHEDULED_DEP_DATE").toLocalDateTime(),
+							res.getTimestamp("ARRIVAL_DATE").toLocalDateTime(), res.getDouble("DEPARTURE_DELAY"),
+							res.getDouble("ARRIVAL_DELAY"), res.getDouble("AIR_TIME"), res.getInt("DISTANCE"));	
+					
+					list.add(routeIdMap.get(route));
+					counter++;
+					
+					sourceAirport.getFlights().add(routeIdMap.get(route));
+					destinationAirport.getFlights().add(routeIdMap.get(route));
+					
+				}	
+				conn.close();
+				return list;
+			} catch (SQLException e) {
+				e.printStackTrace();
+				throw new RuntimeException();
+			}
+			}
+
+
+		public double getMediaRitardi(Airport a1, Airport a2) {
+			String sql="select AVG(DEPARTURE_DELAY) as r from flights " + 
+					"where ORIGIN_AIRPORT_ID=? AND DESTINATION_AIRPORT_ID=?";
+			Double ris = 0.0;
+			try {
+				Connection conn = ConnectDB.getConnection();
+				PreparedStatement st = conn.prepareStatement(sql);
+				st.setString(1, a1.getAirportId());
+				st.setString(2, a2.getAirportId());
+				ResultSet res = st.executeQuery();
+				
+				if (res.next()) {
+					ris= res.getDouble("r");
+				}
+				conn.close();
+				return ris;
+			} catch (SQLException e) {
+				e.printStackTrace();
+				throw new RuntimeException();
+			}
+		}
+		}
